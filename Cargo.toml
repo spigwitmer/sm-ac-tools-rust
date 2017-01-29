@@ -1,0 +1,7 @@
+[package]
+name = "itg2-patch-decrypt"
+version = "0.1.0"
+authors = ["spigwitmer"]
+
+[dependencies]
+rust-crypto = "^0.2"
