@@ -11,7 +11,7 @@ use std::io::stderr;
 use std::io::Write;
 use std::process::exit;
 use patch_file::{CryptFileMetadata, extract_metadata};
-use crypt::derive_aes_key;
+use crypt::{derive_aes_key, verify_crypt_metadata, decrypt_file};
 use constants::FILE_MAGIC_ITG2;
 
 fn usage(argv0: &str) {
@@ -27,13 +27,14 @@ fn main() {
     }
 
     let src_file: &str = &args[1];
-    //let dst_file: &str = &args[2];
+    let dst_file: &str = &args[2];
 
     let mut crypt_metadata = CryptFileMetadata::new();
     let mut aes_key = [0; 24];
     let mut src_fhnd = match File::open(src_file) {
         Ok(hnd) => hnd,
-        Err(e) => panic!("Could not open src file: {}", e.description())
+        Err(e) => panic!("Could not open src file for reading: {}",
+                         e.description())
     };
     match extract_metadata(&mut src_fhnd, &mut crypt_metadata) {
         Err(e) => panic!("Could not read crypt metadata: {}",
@@ -41,8 +42,8 @@ fn main() {
         Ok(_) => derive_aes_key(&crypt_metadata, &mut aes_key)
     }
 
-    if crypt_metadata.magic[..] != FILE_MAGIC_ITG2[..] {
-        writeln!(std::io::stderr(), "Error: bad file magic");
+    if crypt_metadata.magic != FILE_MAGIC_ITG2 {
+        let _ = writeln!(std::io::stderr(), "Error: bad file magic");
         exit(1);
     }
 
@@ -51,4 +52,15 @@ fn main() {
         crypt_metadata.magic[1] as char);
     println!("File Size: {}", crypt_metadata.file_size);
     println!("Subkey size: {}", crypt_metadata.subkey_size);
+
+    if !verify_crypt_metadata(&crypt_metadata) {
+        let _ = writeln!(std::io::stderr(), "Error: bad AES verification");
+        exit(1);
+    }
+    let mut dst_fhnd = match File::create(dst_file) {
+        Ok(hnd) => hnd,
+        Err(e) => panic!("Could not open dest file for writing: {}",
+                         e.description())
+    };
+    decrypt_file(&crypt_metadata, &aes_key, &mut src_fhnd, &mut dst_fhnd);
 }
