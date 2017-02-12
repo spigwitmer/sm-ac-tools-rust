@@ -45,6 +45,12 @@ pub fn verify_crypt_metadata(metadata: &CryptFileMetadata,
         .and_then(|_: BufferResult| {
             let mut dreadbuf = dec_buf.take_read_buffer();
             let dmagic = dreadbuf.take_remaining();
+            print!("dmagic: ");
+            let dmagic_iter = dmagic.into_iter();
+            for x in dmagic_iter {
+                print!("{0:x} ", x);
+            }
+            println!("");
             Ok(dmagic[0..2] == DECRYPT_MAGIC_ITG2[0..2])
         });
     res

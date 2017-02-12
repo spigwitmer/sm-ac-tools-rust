@@ -1,5 +1,6 @@
 use std::io;
 use std::io::prelude::*;
+use std::vec::Vec;
 
 pub struct CryptFileMetadata {
     pub magic: [u8; 2],
@@ -37,9 +38,11 @@ pub fn extract_metadata<T: Read>(fhnd: &mut T,
     try!(fhnd.read_exact(&mut metadata.magic));
     metadata.file_size = try!(read_u32_le(fhnd));
     metadata.subkey_size = try!(read_u32_le(fhnd));
-    metadata.subkey = Vec::with_capacity(metadata.subkey_size as usize);
-    try!(fhnd.read_exact(&mut metadata.subkey[..]));
-    try!(fhnd.read_exact(&mut metadata.verify_block));
+    let subkey_usize = metadata.subkey_size as usize;
+    metadata.subkey = Vec::with_capacity(subkey_usize);
+    metadata.subkey.resize(subkey_usize, 0);
+    try!(fhnd.read(&mut metadata.subkey[0..subkey_usize]));
+    try!(fhnd.read(&mut metadata.verify_block));
     Ok(0)
 }
 
