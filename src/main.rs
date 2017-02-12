@@ -7,8 +7,7 @@ mod crypt;
 use std::fs::File;
 use std::env;
 use std::error::Error;
-use std::io::stderr;
-use std::io::Write;
+use std::io::{stderr, Write};
 use std::process::exit;
 use patch_file::{CryptFileMetadata, extract_metadata};
 use crypt::{derive_aes_key, verify_crypt_metadata, decrypt_file};
@@ -43,7 +42,7 @@ fn main() {
     }
 
     if crypt_metadata.magic != FILE_MAGIC_ITG2 {
-        let _ = writeln!(std::io::stderr(), "Error: bad file magic");
+        let _ = writeln!(stderr(), "Error: bad file magic");
         exit(1);
     }
 
@@ -53,8 +52,11 @@ fn main() {
     println!("File Size: {}", crypt_metadata.file_size);
     println!("Subkey size: {}", crypt_metadata.subkey_size);
 
-    if !verify_crypt_metadata(&crypt_metadata) {
-        let _ = writeln!(std::io::stderr(), "Error: bad AES verification");
+    let block_verified = verify_crypt_metadata(&crypt_metadata,
+                                               &aes_key);
+
+    if !block_verified.is_ok() || !block_verified.unwrap() {
+        let _ = writeln!(stderr(), "Error: bad AES verification");
         exit(1);
     }
     let mut dst_fhnd = match File::create(dst_file) {

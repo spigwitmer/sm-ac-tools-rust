@@ -1,6 +1,5 @@
 use std::io;
 use std::io::prelude::*;
-use constants::FILE_MAGIC_ITG2;
 
 pub struct CryptFileMetadata {
     pub magic: [u8; 2],
