@@ -1,7 +1,6 @@
 use std::io;
 use std::io::prelude::*;
 use std::result;
-use std::fmt;
 use crypto::digest::Digest;
 use crypto::sha2::Sha512;
 use crypto::aes;
@@ -40,12 +39,12 @@ pub fn verify_crypt_metadata(metadata: &CryptFileMetadata,
         .map(|r: BufferResult| {
             r
         })
-        .map_err(|ex: SymmetricCipherError| {
+        .map_err(|_: SymmetricCipherError| {
             "Decrypt error"
         })
-        .and_then(|r: BufferResult| {
+        .and_then(|_: BufferResult| {
             let mut dreadbuf = dec_buf.take_read_buffer();
-            let mut dmagic = dreadbuf.take_remaining();
+            let dmagic = dreadbuf.take_remaining();
             Ok(dmagic[0..2] == DECRYPT_MAGIC_ITG2[0..2])
         });
     res
