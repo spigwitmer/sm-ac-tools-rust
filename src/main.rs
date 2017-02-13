@@ -64,5 +64,14 @@ fn main() {
         Err(e) => panic!("Could not open dest file for writing: {}",
                          e.description())
     };
-    decrypt_file(&crypt_metadata, &aes_key, &mut src_fhnd, &mut dst_fhnd);
+    match decrypt_file(&crypt_metadata, &aes_key,
+                       &mut src_fhnd, &mut dst_fhnd) {
+        Ok(_) => {
+            println!("Decrypted file written to {0}", src_file);
+        },
+        Err(er) => {
+            println!("Error: {0}", er);
+            exit(1);
+        }
+    }
 }

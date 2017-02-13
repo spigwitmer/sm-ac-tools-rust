@@ -61,7 +61,7 @@ pub fn decrypt_file<T: Read, U: Write>(metadata: &CryptFileMetadata,
                                        aes_key: &[u8; 24],
                                        src: &mut T,
                                        dst: &mut U)
-                                      -> Result<usize, &'static str> {
+                                      -> Result<usize, String> {
     let mut decryptor = aes::ecb_decryptor(
             aes::KeySize::KeySize192,
             &aes_key[..],
@@ -72,7 +72,6 @@ pub fn decrypt_file<T: Read, U: Write>(metadata: &CryptFileMetadata,
     let mut cur_buf = RefWriteBuffer::new(&mut cur_block);
     let mut total_bytes: usize = 0;
     let mut last_read_count: usize = 0;
-    let mut bytes_written: usize = 0;
 
     /*
      * Decrypt in blocks of 16 bytes.
@@ -80,36 +79,64 @@ pub fn decrypt_file<T: Read, U: Write>(metadata: &CryptFileMetadata,
      * Null out the previous block every 4080 bytes.
      */
     loop {
-        try!(src.read(&mut cur_cipher)
-            .or_else(|err: io::Error| {
-                Err("I/O error during read")
+        let bytes_written: usize = try!(src.read(&mut cur_cipher)
+            .or_else(|er: io::Error| {
+                Err(format!("I/O error during read: {0}", er))
             })
             .and_then(|read_count: usize| {
+                if read_count == 0 {
+                    return Ok(0)
+                }
                 last_read_count = read_count;
                 total_bytes += read_count;
                 let mut cipher_buf = RefReadBuffer::new(&mut cur_cipher);
-                decryptor.decrypt(&mut cipher_buf, &mut cur_buf, true)
-                .or_else(|_: SymmetricCipherError| {
-                    Err("Cipher error during decryption")
+
+                let mut decrypt_res = Ok(BufferResult::BufferUnderflow);
+                loop {
+                    decrypt_res = decryptor.decrypt(&mut cipher_buf, &mut cur_buf, true);
+                    match decrypt_res {
+                        /* We shouldn't be hitting BoFs when doing 16 bytes at a time.. */
+                        Ok(BufferResult::BufferOverflow) =>
+                            return Err(String::from("Buffer overflow")),
+                        Ok(BufferResult::BufferUnderflow) =>
+                            break,
+                        Err(_) => { }
+                    }
+                }
+
+                decrypt_res
+                .or_else(|er: SymmetricCipherError| {
+                    Err(format!("Cipher error during decryption: {0:?}", er))
                 })
                 .and_then(|_: BufferResult| {
                     let mut cur_buf_read_buffer = cur_buf.take_read_buffer();
-                    let mut dec_block: &[u8] = cur_buf_read_buffer.take_next(16);
+                    let dec_block: &[u8] = cur_buf_read_buffer.take_remaining();
+                    if dec_block.len() == 0 {
+                        println!("Empty decryption block?");
+                        return Ok(0)
+                    }
+                    if total_bytes % 4080 == 0 {
+                        prev_block = [0u8; 16];
+                    }
                     for i in 0..16 {
-                        //cur_block[i] ^= prev_block[i] - i as u8;
-                        prev_block[i] = (dec_block[i] ^ prev_block[i]) - i as u8;
+                        prev_block[i] = dec_block[i] ^
+                                        prev_block[i].wrapping_sub(i as u8);
                     }
                     // TODO: 4080 check
-                    bytes_written = cmp::min(
-                            cmp::min(16, last_read_count),
-                            metadata.file_size as usize - total_bytes
-                            );
-                    dst.write_all(&prev_block[0..bytes_written])
-                    .or_else(|r: io::Error| {
-                        Err("Write error")
+                    println!("file_size, total_bytes, last_read_count: {0} {1} {2}",
+                             metadata.file_size, total_bytes, last_read_count);
+                    let to_write: usize = cmp::min(metadata.file_size as usize,
+                                                   last_read_count);
+                    dst.write_all(&prev_block[0..to_write])
+                    .or_else(|er: io::Error| {
+                        Err(format!("Write error: {0}", er))
+                    })
+                    .and_then(|_: _| {
+                        Ok(to_write)
                     })
                 })
             }));
+        println!("bytes_written: {0}", bytes_written);
         if bytes_written < 16 {
             break;
         }
